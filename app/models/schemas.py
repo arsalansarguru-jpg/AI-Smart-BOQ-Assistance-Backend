@@ -25,6 +25,8 @@ class BoqLineItem(BaseModel):
     rate: float | None = None
     amount: float | None = None
     remarks: str | None = None
+    confidence: float | None = None
+    original_text: str | None = None
 
 
 class StructureRequest(BaseModel):
