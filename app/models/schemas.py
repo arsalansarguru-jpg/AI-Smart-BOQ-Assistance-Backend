@@ -48,3 +48,26 @@ class ExportRequest(BaseModel):
     items: list[BoqLineItem] = Field(default_factory=list)
     project_name: str | None = None
     summary: str | None = None
+
+
+class QuotationLineItem(BaseModel):
+    item_name: str
+    brand: str | None = None
+    unit: str | None = None
+    quoted_rate: float
+    normalized_item_name: str | None = None
+
+
+class QuotationStructureRequest(BaseModel):
+    filename: str
+    tables: list[TableBlock] = Field(default_factory=list)
+
+
+class QuotationStructureResponse(BaseModel):
+    vendor_name: str
+    quotation_date: str | None = None
+    items: list[QuotationLineItem] = Field(default_factory=list)
+    confidence: float
+    summary: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+
