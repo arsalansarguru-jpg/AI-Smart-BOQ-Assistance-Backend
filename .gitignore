@@ -1,0 +1,18 @@
+# Environment variables
+.env
+
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# Uploaded / Generated files
+uploads/
+outputs/
+*.pdf
+*.xlsx
