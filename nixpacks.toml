@@ -6,4 +6,4 @@ NIXPACKS_PYTHON_VERSION = "3.12"
 cmds = ["pip install -r requirements.txt"]
 
 [start]
-cmd = "sh start.sh"
+cmd = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
