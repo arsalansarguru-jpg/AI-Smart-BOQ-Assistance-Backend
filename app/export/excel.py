@@ -164,7 +164,7 @@ def build_boq_workbook(
         cost_cell.font = BOLD_FONT
         cost_cell.alignment = Alignment(horizontal="right", vertical="center")
         cost_cell.border = thin_border
-        cost_cell.number_format = "$#,##0.00"
+        cost_cell.number_format = '"₹"#,##0.00'
         
         # Soft Zebra layout for lists
         if idx % 2 == 1:
@@ -192,7 +192,7 @@ def build_boq_workbook(
     total_cost.alignment = Alignment(horizontal="right", vertical="center")
     total_cost.fill = SUB_FILL
     total_cost.border = double_bottom_border
-    total_cost.number_format = "$#,##0.00"
+    total_cost.number_format = '"₹"#,##0.00'
     
     # Custom column spacing
     ws_summary.column_dimensions["A"].width = 34
@@ -260,13 +260,13 @@ def build_boq_workbook(
         
         c_rate = ws_boq.cell(row=r, column=6, value=rate)
         c_rate.alignment = Alignment(horizontal="right", vertical="top")
-        c_rate.number_format = "#,##0.00"
+        c_rate.number_format = '"₹"#,##0.00'
         
         # Dynamic quantity * rate multiplication formula!
         c_amount = ws_boq.cell(row=r, column=7, value=f"=E{r}*F{r}")
         c_amount.alignment = Alignment(horizontal="right", vertical="top")
         c_amount.font = BOLD_FONT
-        c_amount.number_format = "#,##0.00"
+        c_amount.number_format = '"₹"#,##0.00'
         
         c_remarks = ws_boq.cell(row=r, column=8, value=item.remarks)
         c_remarks.alignment = Alignment(vertical="top", wrap_text=True)
@@ -294,7 +294,7 @@ def build_boq_workbook(
     val_total.alignment = Alignment(horizontal="right", vertical="center")
     val_total.fill = SUB_FILL
     val_total.border = double_bottom_border
-    val_total.number_format = "#,##0.00"
+    val_total.number_format = '"₹"#,##0.00'
     
     # Clean double border lines for the rest of total columns
     for col_idx in range(1, 9):
