@@ -3,7 +3,7 @@ import os
 import asyncio
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel, Field, model_validator
 from google.genai import types
 
@@ -82,10 +82,13 @@ For the requested item, perform the following:
 Ensure your output is a valid JSON object matching the requested schema. Return only highly reliable, active suppliers."""
 
 @router.post("/discover", response_model=SourcingResponse)
-async def discover_regional_vendors(body: SourcingRequest) -> SourcingResponse:
+async def discover_regional_vendors(
+    body: SourcingRequest,
+    x_gemini_api_key: Optional[str] = Header(None)
+) -> SourcingResponse:
     # 1. Retrieve the Gemini API key
     try:
-        api_key = _get_gemini_api_key()
+        api_key = x_gemini_api_key.strip() if (x_gemini_api_key and x_gemini_api_key.strip()) else _get_gemini_api_key()
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -235,10 +238,13 @@ Return a JSON object containing the `matches` list, where each entry matches the
 
 
 @router.post("/auto-link", response_model=AutoLinkResponse)
-async def auto_link_project_documents(body: AutoLinkRequest) -> AutoLinkResponse:
+async def auto_link_project_documents(
+    body: AutoLinkRequest,
+    x_gemini_api_key: Optional[str] = Header(None)
+) -> AutoLinkResponse:
     # 1. Retrieve the Gemini API key
     try:
-        api_key = _get_gemini_api_key()
+        api_key = x_gemini_api_key.strip() if (x_gemini_api_key and x_gemini_api_key.strip()) else _get_gemini_api_key()
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -336,10 +342,13 @@ Return only a valid JSON object matching the requested schema. Do not return ext
 
 
 @router.post("/match-price-list", response_model=PriceListMatchResponse)
-async def match_price_list_rate(body: PriceListMatchRequest) -> PriceListMatchResponse:
+async def match_price_list_rate(
+    body: PriceListMatchRequest,
+    x_gemini_api_key: Optional[str] = Header(None)
+) -> PriceListMatchResponse:
     # 1. Retrieve the Gemini API key
     try:
-        api_key = _get_gemini_api_key()
+        api_key = x_gemini_api_key.strip() if (x_gemini_api_key and x_gemini_api_key.strip()) else _get_gemini_api_key()
     except Exception as exc:
         raise HTTPException(
             status_code=500,
