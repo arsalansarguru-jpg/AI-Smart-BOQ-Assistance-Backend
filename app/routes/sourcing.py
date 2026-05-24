@@ -13,10 +13,40 @@ from app.ai.structure import (
     _parse_json_response,
     DEFAULT_GEMINI_MODEL
 )
+from app.ai.kimi import get_kimi_api_key, generate_kimi_content
 
 logger = logging.getLogger(__name__)
 
-async def generate_content_with_retry(client, model, contents, config, max_attempts=4):
+async def generate_content_with_retry(client, model, contents, config, api_key: str = None, max_attempts=4):
+    # 1. Determine if we should route to Kimi (Moonshot AI)
+    is_kimi = False
+    custom_kimi_key = None
+    
+    if api_key and api_key.strip().startswith("sk-"):
+        is_kimi = True
+        custom_kimi_key = api_key.strip()
+    elif (not api_key or not api_key.strip().startswith("AIzaSy")) and get_kimi_api_key():
+        is_kimi = True
+
+    if is_kimi:
+        system_instruction = config.system_instruction if hasattr(config, "system_instruction") else ""
+        try:
+            kimi_text = await generate_kimi_content(
+                system_instruction=system_instruction,
+                user_prompt=contents,
+                custom_key=custom_kimi_key
+            )
+            class MockResponse:
+                def __init__(self, text):
+                    self.text = text
+            return MockResponse(kimi_text)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=520,
+                detail=f"Kimi AI Engine query failed: {exc}"
+            )
+
+    # 2. Otherwise, fall back to standard Gemini execution...
     attempt = 0
     while True:
         attempt += 1
@@ -117,6 +147,7 @@ async def discover_regional_vendors(
                 temperature=0.2,
                 response_mime_type="application/json",
             ),
+            api_key=api_key
         )
     except Exception as exc:
         raise HTTPException(
@@ -273,6 +304,7 @@ async def auto_link_project_documents(
                 temperature=0.1,
                 response_mime_type="application/json",
             ),
+            api_key=api_key
         )
     except Exception as exc:
         raise HTTPException(
@@ -377,6 +409,7 @@ async def match_price_list_rate(
                 temperature=0.1,
                 response_mime_type="application/json",
             ),
+            api_key=api_key
         )
     except Exception as exc:
         raise HTTPException(
