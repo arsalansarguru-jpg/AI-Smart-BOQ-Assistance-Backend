@@ -1,5 +1,7 @@
 import json
 import os
+import asyncio
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
@@ -11,6 +13,29 @@ from app.ai.structure import (
     _parse_json_response,
     DEFAULT_GEMINI_MODEL
 )
+
+logger = logging.getLogger(__name__)
+
+async def generate_content_with_retry(client, model, contents, config, max_attempts=4):
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            return await asyncio.to_thread(
+                client.models.generate_content,
+                model=model,
+                contents=contents,
+                config=config,
+            )
+        except Exception as exc:
+            exc_str = str(exc).lower()
+            is_rate_limit = any(x in exc_str for x in ["429", "resource_exhausted", "quota", "rate limit", "exhausted"])
+            if is_rate_limit and attempt < max_attempts:
+                sleep_time = 3.0 * (2 ** (attempt - 1))
+                logger.warning(f"Gemini API rate limited (attempt {attempt}/{max_attempts}). Retrying in {sleep_time} seconds. Error: {exc}")
+                await asyncio.sleep(sleep_time)
+                continue
+            raise exc
 
 router = APIRouter(prefix="/sourcing", tags=["sourcing"])
 
@@ -69,9 +94,10 @@ async def discover_regional_vendors(body: SourcingRequest) -> SourcingResponse:
     model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
     client = _create_gemini_client(api_key)
 
-    # 4. Generate content from Gemini
+    # 4. Generate content from Gemini with retries
     try:
-        response = client.models.generate_content(
+        response = await generate_content_with_retry(
+            client=client,
             model=model,
             contents=json.dumps(user_payload, ensure_ascii=False),
             config=types.GenerateContentConfig(
@@ -221,9 +247,10 @@ async def auto_link_project_documents(body: AutoLinkRequest) -> AutoLinkResponse
     model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
     client = _create_gemini_client(api_key)
 
-    # 4. Generate content from Gemini
+    # 4. Generate content from Gemini with retries
     try:
-        response = client.models.generate_content(
+        response = await generate_content_with_retry(
+            client=client,
             model=model,
             contents=json.dumps(user_payload, ensure_ascii=False),
             config=types.GenerateContentConfig(
@@ -321,9 +348,10 @@ async def match_price_list_rate(body: PriceListMatchRequest) -> PriceListMatchRe
     model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
     client = _create_gemini_client(api_key)
 
-    # 4. Generate content from Gemini
+    # 4. Generate content from Gemini with retries
     try:
-        response = client.models.generate_content(
+        response = await generate_content_with_retry(
+            client=client,
             model=model,
             contents=json.dumps(user_payload, ensure_ascii=False),
             config=types.GenerateContentConfig(
