@@ -137,6 +137,14 @@ class LinkedDrawing(BaseModel):
     @classmethod
     def map_input_fields(cls, data):
         if isinstance(data, dict):
+            # If the dict is a single key-value pair, and "id" is not in data,
+            # treat key as "id" and value as "title" (e.g. {'0158d24a-...': 'Electrical Main SLD'})
+            if len(data) == 1 and "id" not in data:
+                key = list(data.keys())[0]
+                val = data[key]
+                if isinstance(val, str):
+                    data = {"id": key, "title": val}
+
             # Map file_name -> title if title is missing
             if "file_name" in data and "title" not in data:
                 data["title"] = data["file_name"]
