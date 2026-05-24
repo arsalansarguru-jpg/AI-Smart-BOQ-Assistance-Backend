@@ -2,7 +2,7 @@ import json
 import os
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from google.genai import types
 
 from app.ai.structure import (
@@ -129,9 +129,29 @@ class AutoLinkRequest(BaseModel):
 
 class LinkedDrawing(BaseModel):
     id: str = Field(..., description="Drawing sheet ID")
-    sheetNumber: str = Field(..., description="Calculated drawing sheet number, e.g. H-102, E-204, P-101")
-    title: str = Field(..., description="Standardized clean drawing title")
-    fileUrl: str = Field("#", description="Direct reference URL")
+    sheetNumber: str = Field(default="D-101", description="Calculated drawing sheet number, e.g. H-102, E-204, P-101")
+    title: str = Field(default="Attachment Drawing", description="Standardized clean drawing title")
+    fileUrl: str = Field(default="#", description="Direct reference URL")
+
+    @model_validator(mode="before")
+    @classmethod
+    def map_input_fields(cls, data):
+        if isinstance(data, dict):
+            # Map file_name -> title if title is missing
+            if "file_name" in data and "title" not in data:
+                data["title"] = data["file_name"]
+            
+            # Map file_name -> sheetNumber if sheetNumber is missing
+            if "sheetNumber" not in data:
+                import re
+                title = data.get("title", data.get("file_name", ""))
+                # Look for patterns like E-204, H-102, P-101, etc.
+                match = re.search(r'\b([A-Z]-\d{2,4})\b', title, re.IGNORECASE)
+                if match:
+                    data["sheetNumber"] = match.group(1).upper()
+                else:
+                    data["sheetNumber"] = "D-101"
+        return data
 
 class LinkedMake(BaseModel):
     brand: str = Field(..., description="Brand name")
@@ -155,8 +175,12 @@ You are given:
 3. A list of approved manufacturer brand names from the Make List (e.g. ['Supreme', 'Polycab', 'Finolex', 'Astral', 'Grundfos', 'Schneider']).
 
 For each BOQ item:
-1. Match it to highly relevant drawings from the list. If a BOQ item is 'copper piping HVAC', match it to drawings like 'HVAC-Piping-Layout.pdf' or any HVAC-related drawing. If no drawings match, return an empty drawings list.
-   - For matched drawings, parse/assign a simulated sheet number if none is present (e.g., 'H-102' for HVAC, 'E-204' for Electrical, 'P-101' for Plumbing, 'F-102' for Fire Fighting) and clean up the title.
+1. Match it to highly relevant drawings from the list. If no drawings match, return an empty drawings list.
+   - VERY IMPORTANT: The drawings output list entries MUST strictly contain the following keys:
+     * `id`: The matched drawing ID.
+     * `sheetNumber`: A simulated sheet number parsed or assigned to this drawing (e.g., 'H-102' for HVAC, 'E-204' for Electrical, 'P-101' for Plumbing).
+     * `title`: A standardized clean title for the sheet (e.g., 'HVAC Piping Plan Layout'). Do NOT return the input key `file_name`—use `title` instead.
+     * `fileUrl`: Set to '#' by default.
 2. Match it to approved brands from the make list. E.g. if the item is 'flexible cable', match it to electrical brands like 'Finolex' or 'Polycab'. Determine the status as 'Approved', 'Preferred', or 'Alternative' based on how well the brand matches the description. If no brands are provided or none match, recommend 1-2 standard brands matching the trade from the make list or standard Indian/Middle Eastern construction brands.
 3. Provide a brief 1-sentence `notes` explaining why these drawings/brands were linked, or adding a quick installation/procurement note.
 
