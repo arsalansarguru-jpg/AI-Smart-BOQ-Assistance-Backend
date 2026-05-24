@@ -29,6 +29,15 @@ async def generate_content_with_retry(client, model, contents, config, max_attem
             )
         except Exception as exc:
             exc_str = str(exc).lower()
+            
+            # Check if this is a daily quota limit error rather than a temporary per-minute rate limit
+            is_daily_limit = any(x in exc_str for x in ["perday", "requestsperday", "daily"])
+            if is_daily_limit:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Your Gemini API Daily Free Quota (20 requests/day) has been exhausted. Please add a billing card to your Google AI Studio account to upgrade to the Pay-as-you-go tier (which offers 1,500 free requests/day) or wait for the daily reset."
+                )
+            
             is_rate_limit = any(x in exc_str for x in ["429", "resource_exhausted", "quota", "rate limit", "exhausted"])
             if is_rate_limit and attempt < max_attempts:
                 sleep_time = 3.0 * (2 ** (attempt - 1))
