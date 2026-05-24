@@ -136,7 +136,11 @@ class LinkedDrawing(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def map_input_fields(cls, data):
-        if isinstance(data, dict):
+        if isinstance(data, str):
+            # If Gemini returned just the drawing ID as a string, wrap it safely
+            data = {"id": data, "title": "Attachment Drawing", "sheetNumber": "D-101"}
+            
+        elif isinstance(data, dict):
             # If the dict is a single key-value pair, and "id" is not in data,
             # treat key as "id" and value as "title" (e.g. {'0158d24a-...': 'Electrical Main SLD'})
             if len(data) == 1 and "id" not in data:
