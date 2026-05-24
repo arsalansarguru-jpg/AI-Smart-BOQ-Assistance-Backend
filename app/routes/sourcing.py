@@ -17,7 +17,7 @@ from app.ai.kimi import get_kimi_api_key, generate_kimi_content
 
 logger = logging.getLogger(__name__)
 
-async def generate_content_with_retry(client, model, contents, config, api_key: str = None, max_attempts=4):
+async def generate_content_with_retry(model, contents, config, api_key: str = None, max_attempts=4):
     # 1. Determine if we should route to Kimi (Moonshot AI)
     is_kimi = False
     custom_kimi_key = None
@@ -47,6 +47,13 @@ async def generate_content_with_retry(client, model, contents, config, api_key: 
             )
 
     # 2. Otherwise, fall back to standard Gemini execution...
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="No Gemini or Kimi API key was configured or provided."
+        )
+    client = _create_gemini_client(api_key)
+
     attempt = 0
     while True:
         attempt += 1
@@ -116,9 +123,12 @@ async def discover_regional_vendors(
     body: SourcingRequest,
     x_gemini_api_key: Optional[str] = Header(None)
 ) -> SourcingResponse:
-    # 1. Retrieve the Gemini API key
+    # 1. Retrieve the Gemini API key safely
     try:
-        api_key = x_gemini_api_key.strip() if (x_gemini_api_key and x_gemini_api_key.strip()) else _get_gemini_api_key()
+        if isinstance(x_gemini_api_key, str) and x_gemini_api_key.strip():
+            api_key = x_gemini_api_key.strip()
+        else:
+            api_key = _get_gemini_api_key()
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -134,12 +144,10 @@ async def discover_regional_vendors(
 
     # 3. Choose the model
     model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
-    client = _create_gemini_client(api_key)
 
-    # 4. Generate content from Gemini with retries
+    # 4. Generate content from Gemini/Kimi with retries
     try:
         response = await generate_content_with_retry(
-            client=client,
             model=model,
             contents=json.dumps(user_payload, ensure_ascii=False),
             config=types.GenerateContentConfig(
@@ -273,9 +281,12 @@ async def auto_link_project_documents(
     body: AutoLinkRequest,
     x_gemini_api_key: Optional[str] = Header(None)
 ) -> AutoLinkResponse:
-    # 1. Retrieve the Gemini API key
+    # 1. Retrieve the Gemini API key safely
     try:
-        api_key = x_gemini_api_key.strip() if (x_gemini_api_key and x_gemini_api_key.strip()) else _get_gemini_api_key()
+        if isinstance(x_gemini_api_key, str) and x_gemini_api_key.strip():
+            api_key = x_gemini_api_key.strip()
+        else:
+            api_key = _get_gemini_api_key()
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -291,12 +302,10 @@ async def auto_link_project_documents(
 
     # 3. Choose the model
     model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
-    client = _create_gemini_client(api_key)
 
-    # 4. Generate content from Gemini with retries
+    # 4. Generate content from Gemini/Kimi with retries
     try:
         response = await generate_content_with_retry(
-            client=client,
             model=model,
             contents=json.dumps(user_payload, ensure_ascii=False),
             config=types.GenerateContentConfig(
@@ -378,9 +387,12 @@ async def match_price_list_rate(
     body: PriceListMatchRequest,
     x_gemini_api_key: Optional[str] = Header(None)
 ) -> PriceListMatchResponse:
-    # 1. Retrieve the Gemini API key
+    # 1. Retrieve the Gemini API key safely
     try:
-        api_key = x_gemini_api_key.strip() if (x_gemini_api_key and x_gemini_api_key.strip()) else _get_gemini_api_key()
+        if isinstance(x_gemini_api_key, str) and x_gemini_api_key.strip():
+            api_key = x_gemini_api_key.strip()
+        else:
+            api_key = _get_gemini_api_key()
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -396,12 +408,10 @@ async def match_price_list_rate(
 
     # 3. Choose the model
     model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
-    client = _create_gemini_client(api_key)
 
-    # 4. Generate content from Gemini with retries
+    # 4. Generate content from Gemini/Kimi with retries
     try:
         response = await generate_content_with_retry(
-            client=client,
             model=model,
             contents=json.dumps(user_payload, ensure_ascii=False),
             config=types.GenerateContentConfig(

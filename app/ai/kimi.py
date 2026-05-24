@@ -49,11 +49,24 @@ async def generate_kimi_content(system_instruction: str, user_prompt: str, custo
                 )
                 
                 # Check for rate-limiting (429)
-                if response.status_code == 429 and attempt < max_attempts:
-                    sleep_time = 3.0 * (2 ** (attempt - 1))
-                    logger.warning(f"Kimi API rate limited (attempt {attempt}/{max_attempts}). Retrying in {sleep_time}s...")
-                    await asyncio.sleep(sleep_time)
-                    continue
+                if response.status_code == 429:
+                    try:
+                        err_data = response.json()
+                        err_msg = err_data.get("error", {}).get("message", "").lower()
+                    except Exception:
+                        err_msg = response.text.lower()
+                    
+                    is_insufficient = any(x in err_msg for x in ["insufficient balance", "balance", "quota"])
+                    if is_insufficient:
+                        raise ValueError(
+                            "Your Kimi AI account is suspended due to insufficient balance or expired trial credits. Please recharge your Kimi / Moonshot AI account at https://platform.moonshot.cn/ or configure a working Gemini key."
+                        )
+                        
+                    if attempt < max_attempts:
+                        sleep_time = 3.0 * (2 ** (attempt - 1))
+                        logger.warning(f"Kimi API rate limited (attempt {attempt}/{max_attempts}). Retrying in {sleep_time}s...")
+                        await asyncio.sleep(sleep_time)
+                        continue
                     
                 response.raise_for_status()
                 data = response.json()
@@ -71,6 +84,8 @@ async def generate_kimi_content(system_instruction: str, user_prompt: str, custo
                     
                 return content_str
                 
+        except ValueError as exc:
+            raise exc
         except Exception as exc:
             if attempt >= max_attempts:
                 logger.error(f"Kimi API query failed after {max_attempts} attempts: {exc}")
