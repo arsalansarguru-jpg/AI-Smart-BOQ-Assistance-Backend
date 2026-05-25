@@ -179,6 +179,21 @@ class LinkedMake(BaseModel):
     brand: str = Field(..., description="Brand name")
     status: str = Field("Approved", description="Approval status: Approved, Preferred, Alternative")
 
+    @model_validator(mode="before")
+    @classmethod
+    def map_input_fields(cls, data):
+        if isinstance(data, str):
+            # If Gemini returned just a string, treat it as the brand name
+            data = {"brand": data, "status": "Approved"}
+        elif isinstance(data, dict):
+            # Map brandName -> brand
+            if "brandName" in data and "brand" not in data:
+                data["brand"] = data["brandName"]
+            # Map name -> brand (just in case)
+            if "name" in data and "brand" not in data:
+                data["brand"] = data["name"]
+        return data
+
 class AutoLinkMatch(BaseModel):
     item_id: str = Field(..., description="BOQ item ID")
     drawings: List[LinkedDrawing] = Field(default_factory=list, description="Matched drawing references")
