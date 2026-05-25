@@ -1,6 +1,8 @@
 import json
 import os
 import re
+import asyncio
+import logging
 from typing import Any
 
 import httpx
@@ -9,6 +11,9 @@ from google import genai
 from google.genai import types
 
 from app.models.schemas import BoqLineItem, StructureResponse, TableBlock
+from app.ai.kimi import get_kimi_api_key, generate_kimi_content
+
+logger = logging.getLogger(__name__)
 
 MAX_ROWS_FOR_AI = 150
 MAX_CELL_CHARS = 500
@@ -74,6 +79,73 @@ def _create_gemini_client(api_key: str) -> genai.Client:
         http_options = types.HttpOptions(httpx_client=http_client)
         return genai.Client(api_key=api_key, http_options=http_options)
     return genai.Client(api_key=api_key)
+
+
+async def generate_content_with_retry(model, contents, config, api_key: str = None, max_attempts=4):
+    # 1. Determine if we should route to Kimi (Moonshot AI)
+    is_kimi = False
+    custom_kimi_key = None
+    
+    if api_key and api_key.strip().startswith("sk-"):
+        is_kimi = True
+        custom_kimi_key = api_key.strip()
+    elif (not api_key or not api_key.strip().startswith("AIzaSy")) and get_kimi_api_key():
+        is_kimi = True
+
+    if is_kimi:
+        system_instruction = config.system_instruction if hasattr(config, "system_instruction") else ""
+        try:
+            kimi_text = await generate_kimi_content(
+                system_instruction=system_instruction,
+                user_prompt=contents,
+                custom_key=custom_kimi_key
+            )
+            class MockResponse:
+                def __init__(self, text):
+                    self.text = text
+            return MockResponse(kimi_text)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=520,
+                detail=f"Kimi AI Engine query failed: {exc}"
+            )
+
+    # 2. Otherwise, fall back to standard Gemini execution...
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="No Gemini or Kimi API key was configured or provided."
+        )
+    client = _create_gemini_client(api_key)
+
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            return await asyncio.to_thread(
+                client.models.generate_content,
+                model=model,
+                contents=contents,
+                config=config,
+            )
+        except Exception as exc:
+            exc_str = str(exc).lower()
+            
+            # Check if this is a daily quota limit error rather than a temporary per-minute rate limit
+            is_daily_limit = any(x in exc_str for x in ["perday", "requestsperday", "daily"])
+            if is_daily_limit:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Your Gemini API Daily Free Quota (20 requests/day) has been exhausted. Please add a billing card to your Google AI Studio account to upgrade to the Pay-as-you-go tier (which offers 1,500 free requests/day) or wait for the daily reset."
+                )
+            
+            is_rate_limit = any(x in exc_str for x in ["429", "resource_exhausted", "quota", "rate limit", "exhausted"])
+            if is_rate_limit and attempt < max_attempts:
+                sleep_time = 3.0 * (2 ** (attempt - 1))
+                logger.warning(f"Gemini API rate limited (attempt {attempt}/{max_attempts}). Retrying in {sleep_time} seconds. Error: {exc}")
+                await asyncio.sleep(sleep_time)
+                continue
+            raise exc
 
 
 def _truncate_cell(value: str | None) -> str | None:
@@ -175,14 +247,16 @@ def _parse_json_response(text: str) -> dict[str, Any]:
     return parsed
 
 
-def structure_boq_tables(filename: str, tables: list[TableBlock]) -> StructureResponse:
-    api_key = _get_gemini_api_key()
+async def structure_boq_tables(filename: str, tables: list[TableBlock], api_key: str = None) -> StructureResponse:
     if not api_key:
+        api_key = _get_gemini_api_key()
+    
+    if not api_key and not get_kimi_api_key():
         raise HTTPException(
             status_code=503,
             detail=(
-                "GEMINI_API_KEY is not set on the backend. "
-                "Copy backend/.env.example to backend/.env and add your Google Gemini API key."
+                "Neither GEMINI_API_KEY nor KIMI_API_KEY is configured on the backend. "
+                "Please configure an API key to proceed."
             ),
         )
 
@@ -220,10 +294,9 @@ def structure_boq_tables(filename: str, tables: list[TableBlock]) -> StructureRe
     }
 
     model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
-    client = _create_gemini_client(api_key)
 
     try:
-        response = client.models.generate_content(
+        response = await generate_content_with_retry(
             model=model,
             contents=json.dumps(user_payload, ensure_ascii=False),
             config=types.GenerateContentConfig(
@@ -231,23 +304,24 @@ def structure_boq_tables(filename: str, tables: list[TableBlock]) -> StructureRe
                 temperature=0.1,
                 response_mime_type="application/json",
             ),
+            api_key=api_key
         )
     except Exception as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"Gemini request failed: {exc}",
+            detail=f"Structuring request failed: {exc}",
         ) from exc
 
     content = response.text
     if not content:
-        raise HTTPException(status_code=502, detail="Gemini returned empty response.")
+        raise HTTPException(status_code=502, detail="AI engine returned empty response.")
 
     try:
         parsed = _parse_json_response(content)
     except (json.JSONDecodeError, ValueError) as exc:
         raise HTTPException(
             status_code=502,
-            detail="Gemini returned invalid JSON.",
+            detail="AI engine returned invalid JSON.",
         ) from exc
 
     raw_items = parsed.get("items") if isinstance(parsed, dict) else []

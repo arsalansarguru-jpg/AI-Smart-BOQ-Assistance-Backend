@@ -47,5 +47,18 @@ def root() -> dict[str, str]:
 
 @app.get("/health")
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health():
+    import os
+    from app.ai.structure import _get_gemini_api_key
+    from app.ai.kimi import get_kimi_api_key
+    
+    gemini_key = _get_gemini_api_key()
+    kimi_key = get_kimi_api_key()
+    
+    return {
+        "status": "ok",
+        "gemini_api_key_configured": bool(gemini_key),
+        "gemini_api_key_length": len(gemini_key) if gemini_key else 0,
+        "kimi_api_key_configured": bool(kimi_key),
+        "kimi_api_key_length": len(kimi_key) if kimi_key else 0
+    }
