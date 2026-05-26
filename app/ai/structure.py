@@ -12,6 +12,7 @@ from google.genai import types
 
 from app.models.schemas import BoqLineItem, StructureResponse, TableBlock
 from app.ai.kimi import get_kimi_api_key, generate_kimi_content
+from app.ai.openai_client import get_openai_api_key, generate_openai_content
 
 logger = logging.getLogger(__name__)
 
@@ -82,15 +83,43 @@ def _create_gemini_client(api_key: str) -> genai.Client:
 
 
 async def generate_content_with_retry(model, contents, config, api_key: str = None, max_attempts=4):
-    # 1. Determine if we should route to Kimi (Moonshot AI)
+    # 1. Determine if we should route to OpenAI ChatGPT or Kimi (Moonshot AI)
+    is_openai = False
     is_kimi = False
-    custom_kimi_key = None
-    
+    custom_key = None
+
     if api_key and api_key.strip().startswith("sk-"):
+        custom_key = api_key.strip()
+        if custom_key.startswith("sk-proj-"):
+            is_openai = True
+        else:
+            # Check if Kimi is explicitly configured on the server, otherwise default sk- keys to OpenAI ChatGPT
+            if get_kimi_api_key() and not get_openai_api_key():
+                is_kimi = True
+            else:
+                is_openai = True
+    elif get_openai_api_key():
+        is_openai = True
+    elif get_kimi_api_key():
         is_kimi = True
-        custom_kimi_key = api_key.strip()
-    elif (not api_key or not api_key.strip().startswith("AIzaSy")) and get_kimi_api_key():
-        is_kimi = True
+
+    if is_openai:
+        system_instruction = config.system_instruction if hasattr(config, "system_instruction") else ""
+        try:
+            openai_text = await generate_openai_content(
+                system_instruction=system_instruction,
+                user_prompt=contents,
+                custom_key=custom_key
+            )
+            class MockResponse:
+                def __init__(self, text):
+                    self.text = text
+            return MockResponse(openai_text)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=520,
+                detail=f"OpenAI ChatGPT Engine query failed: {exc}"
+            )
 
     if is_kimi:
         system_instruction = config.system_instruction if hasattr(config, "system_instruction") else ""
@@ -98,7 +127,7 @@ async def generate_content_with_retry(model, contents, config, api_key: str = No
             kimi_text = await generate_kimi_content(
                 system_instruction=system_instruction,
                 user_prompt=contents,
-                custom_key=custom_kimi_key
+                custom_key=custom_key
             )
             class MockResponse:
                 def __init__(self, text):
@@ -114,7 +143,7 @@ async def generate_content_with_retry(model, contents, config, api_key: str = No
     if not api_key:
         raise HTTPException(
             status_code=400,
-            detail="No Gemini or Kimi API key was configured or provided."
+            detail="No Gemini, OpenAI, or Kimi API key was configured or provided."
         )
     client = _create_gemini_client(api_key)
 
