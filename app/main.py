@@ -20,6 +20,21 @@ cors_origins = os.getenv(
 ).split(",")
 cors_origins = [o.strip() for o in cors_origins if o.strip()]
 
+# Add common local development origins to prevent port-mismatch CORS blocks
+dev_origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+    "http://localhost:3003",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "http://127.0.0.1:3002",
+    "http://127.0.0.1:3003",
+]
+for o in dev_origins:
+    if o not in cors_origins:
+        cors_origins.append(o)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
