@@ -7,7 +7,7 @@ from fastapi import FastAPI
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import export_boq, extract, quotations, structure, sourcing
+from app.routes import export_boq, extract, quotations, structure, sourcing, rfq
 
 app = FastAPI(
     title="BOQ Automation API",
@@ -33,6 +33,7 @@ app.include_router(structure.router, prefix="/api")
 app.include_router(quotations.router, prefix="/api")
 app.include_router(export_boq.router, prefix="/api")
 app.include_router(sourcing.router, prefix="/api")
+app.include_router(rfq.router, prefix="/api")
 
 
 @app.get("/")
